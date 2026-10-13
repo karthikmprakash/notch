@@ -1,5 +1,9 @@
 # Notch — a Dynamic Island for the MacBook notch
 
+[![CI](https://github.com/karthikmprakash/notch/actions/workflows/ci.yml/badge.svg)](https://github.com/karthikmprakash/notch/actions/workflows/ci.yml)
+[![Release](https://github.com/karthikmprakash/notch/actions/workflows/release.yml/badge.svg)](https://github.com/karthikmprakash/notch/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/karthikmprakash/notch?sort=semver)](https://github.com/karthikmprakash/notch/releases/latest)
+
 A menu bar app that turns the area around the notch into a Dynamic Island:
 resting → compact → peek → expanded, with tiles inside, peeks for apps/charger/
 battery/Focus, and a live Claude Code bridge that can approve or deny tool calls
@@ -67,6 +71,28 @@ preset wrapping, and timer duration. Both matte themes and workspace switching
 were checked in the native app. White Matte now uses slightly darker tile fills
 (`#E9EBEF`) to match the card separation in the reference images.
 
+## Install
+
+```bash
+brew install --cask karthikmprakash/tap/notch
+```
+
+That puts `Notch.app` in /Applications and links the same binary as `notch`, so
+the Claude Code hook command is just `notch --hook` no matter where Homebrew
+lives.
+
+The build is **signed ad-hoc, not notarized**, so macOS blocks the first launch
+("Apple could not verify …"). Allow it once — either install with
+`brew install --cask --no-quarantine notch`, or after installing run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Notch.app
+```
+
+Notarized builds need a Developer ID certificate and an Apple Developer Program
+membership. The release workflow already handles them: see
+[Releases, CI and the tap](#releases-ci-and-the-tap).
+
 ## Build and run
 
 ```bash
@@ -94,6 +120,39 @@ permissions again after every build.
    - **Start at login**, **Quit Notch** (⌘Q)
 5. Play something in Spotify or Apple Music with the music tile on: the first
    time, macOS asks for Automation permission (one prompt per player).
+
+## Releases, CI and the tap
+
+| workflow | what it does |
+|---|---|
+| [`ci.yml`](.github/workflows/ci.yml) | on every push and PR: `swift build`, `swift test`, assembles the `.app`, verifies the signature **and every privacy-usage key** (a missing one makes TCC abort the app at runtime), times the hook CLI, uploads the bundle as an artifact |
+| [`release.yml`](.github/workflows/release.yml) | on a `v*` tag: builds **universal** (arm64 + x86_64), optionally signs with a Developer ID and notarizes, packages `Notch-<version>.zip`, publishes the GitHub release with a sha256, and bumps the Homebrew cask |
+
+Cutting a release:
+
+```bash
+# 1. bump Resources/Info.plist (CFBundleShortVersionString + CFBundleVersion)
+# 2. commit, then tag — the tag must match Info.plist or the workflow fails
+git commit -am "Notch 0.2.0"
+git tag -a v0.2.0 -m "Notch 0.2.0"
+git push origin main --tags
+```
+
+Optional repository secrets (Settings → Secrets and variables → Actions):
+
+| secret | effect when set |
+|---|---|
+| `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD` | base64 of a **Developer ID Application** `.p12`; signs the app properly |
+| `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, `NOTARY_PASSWORD` | notarizes and staples the app, so Gatekeeper stops asking (needs an Apple Developer Program membership) |
+| `TAP_TOKEN` | fine-grained PAT with write access to `homebrew-tap`; the release bumps the cask automatically |
+
+Without `TAP_TOKEN`, bump the tap by hand after a release — `tools/update-cask.sh`
+writes both the tap copy and a reference copy under `Casks/`:
+
+```bash
+SHA=$(gh release view v0.2.0 --json assets --jq '.assets[] | select(.name|endswith(".zip"))' >/dev/null;       curl -sL https://github.com/karthikmprakash/notch/releases/download/v0.2.0/Notch-0.2.0.zip | shasum -a 256 | awk '{print $1}')
+./tools/update-cask.sh 0.2.0 "$SHA" --write --tap-dir ../homebrew-tap --push
+```
 
 ## What's in it
 
@@ -127,25 +186,26 @@ waits for your answer and prints the decision back to Claude Code.
 
 ### Add these lines to `~/.claude/settings.json` yourself
 
-The Settings window has a **Copy** button with exactly this, with your real path:
+The Settings window has a **Copy** button with exactly this, filled in with your own
+binary path (use that one if you built from source instead of Homebrew):
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
-      { "hooks": [ { "type": "command", "command": "/Users/karthikmprakash/Documents/Personal/Projects/notch/build/Notch.app/Contents/MacOS/Notch --hook", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "notch --hook", "timeout": 5 } ] }
     ],
     "PostToolUse": [
-      { "hooks": [ { "type": "command", "command": "/Users/karthikmprakash/Documents/Personal/Projects/notch/build/Notch.app/Contents/MacOS/Notch --hook", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "notch --hook", "timeout": 5 } ] }
     ],
     "Notification": [
-      { "hooks": [ { "type": "command", "command": "/Users/karthikmprakash/Documents/Personal/Projects/notch/build/Notch.app/Contents/MacOS/Notch --hook", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "notch --hook", "timeout": 5 } ] }
     ],
     "PermissionRequest": [
-      { "hooks": [ { "type": "command", "command": "/Users/karthikmprakash/Documents/Personal/Projects/notch/build/Notch.app/Contents/MacOS/Notch --hook", "timeout": 120 } ] }
+      { "hooks": [ { "type": "command", "command": "notch --hook", "timeout": 120 } ] }
     ],
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "/Users/karthikmprakash/Documents/Personal/Projects/notch/build/Notch.app/Contents/MacOS/Notch --hook", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "notch --hook", "timeout": 5 } ] }
     ]
   }
 }
