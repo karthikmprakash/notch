@@ -16,13 +16,13 @@ cask "notch" do
 
   app "Notch.app"
   # Same binary the app uses for its Claude Code hooks, so the hook command is
-  # just \`notch --hook\` no matter where Homebrew lives.
+  # just `notch --hook` no matter where Homebrew lives.
   binary "#{appdir}/Notch.app/Contents/MacOS/Notch", target: "notch"
 
   # Releases are signed ad-hoc until a Developer ID certificate is wired into
   # the release workflow. macOS treats a quarantined, non-notarized bundle
   # badly: the first time its executable runs, Gatekeeper kills the process and
-  # deletes the bundle - which also breaks the \`notch --hook\` command that
+  # deletes the bundle - which also breaks the `notch --hook` command that
   # Claude Code calls. Clearing the download's quarantine flag at install time
   # avoids that; drop this postflight once releases are notarized.
   # The step DSL has no appdir, so this targets the default location and
@@ -43,7 +43,7 @@ cask "notch" do
 
       brew reinstall --cask notch
 
-    Claude Code hooks: point them at the \`notch\` command this cask links,
+    Claude Code hooks: point them at the `notch` command this cask links,
     e.g. { "type": "command", "command": "notch --hook" }.
   EOS
 end
