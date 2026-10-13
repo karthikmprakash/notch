@@ -81,13 +81,14 @@ That puts `Notch.app` in /Applications and links the same binary as `notch`, so
 the Claude Code hook command is just `notch --hook` no matter where Homebrew
 lives.
 
-The build is **signed ad-hoc, not notarized**, so Gatekeeper blocks it until you
-allow it once. That block also covers the `notch --hook` command, so clear it
-*before* wiring up the Claude Code hooks — either install with
-`brew install --cask --no-quarantine notch`, or after installing run:
+The build is **signed ad-hoc, not notarized**, and macOS is harsh about that: a
+quarantined, non-notarized bundle is **deleted** the first time its executable
+runs — not merely blocked. That would take the `notch --hook` command down with
+it, so the cask strips the download's quarantine flag during install. If the app
+ever disappears from /Applications, that is Gatekeeper:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Notch.app
+brew reinstall --cask notch
 ```
 
 Notarized builds need a Developer ID certificate and an Apple Developer Program
