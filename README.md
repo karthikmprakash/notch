@@ -81,8 +81,9 @@ That puts `Notch.app` in /Applications and links the same binary as `notch`, so
 the Claude Code hook command is just `notch --hook` no matter where Homebrew
 lives.
 
-The build is **signed ad-hoc, not notarized**, so macOS blocks the first launch
-("Apple could not verify …"). Allow it once — either install with
+The build is **signed ad-hoc, not notarized**, so Gatekeeper blocks it until you
+allow it once. That block also covers the `notch --hook` command, so clear it
+*before* wiring up the Claude Code hooks — either install with
 `brew install --cask --no-quarantine notch`, or after installing run:
 
 ```bash
@@ -150,7 +151,7 @@ Without `TAP_TOKEN`, bump the tap by hand after a release — `tools/update-cask
 writes both the tap copy and a reference copy under `Casks/`:
 
 ```bash
-SHA=$(gh release view v0.2.0 --json assets --jq '.assets[] | select(.name|endswith(".zip"))' >/dev/null;       curl -sL https://github.com/karthikmprakash/notch/releases/download/v0.2.0/Notch-0.2.0.zip | shasum -a 256 | awk '{print $1}')
+SHA=$(curl -sL https://github.com/karthikmprakash/notch/releases/download/v0.2.0/Notch-0.2.0.zip | shasum -a 256 | awk '{print $1}')   # or use the release's sha256.txt
 ./tools/update-cask.sh 0.2.0 "$SHA" --write --tap-dir ../homebrew-tap --push
 ```
 
