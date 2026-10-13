@@ -79,8 +79,8 @@ final class IslandController {
     private func observeModel() {
         model.objectWillChange
             .sink { [weak self] _ in
+                guard let self else { return }
                 Task { @MainActor in
-                    guard let self else { return }
                     self.applyFrame()
                     self.updatePointerGate()
                 }
@@ -94,7 +94,7 @@ final class IslandController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.model.refreshGeometry()
             }
         }
@@ -128,7 +128,7 @@ final class IslandController {
         pointerCheckFromScreen()
         // Click outside while pinned -> unpin and close.
         globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self else { return }
                 if !self.model.containsScreenPoint(NSEvent.mouseLocation) {
                     self.model.handleOutsideClick()

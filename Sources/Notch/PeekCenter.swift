@@ -90,15 +90,15 @@ final class FocusMonitor: ObservableObject {
 
     func start() {
         INFocusStatusCenter.default.requestAuthorization { [weak self] result in
+            guard let self else { return }
             Task { @MainActor in
-                guard let self else { return }
                 self.status = result == .authorized ? .authorized : .denied
                 self.poll()
             }
         }
         guard timer == nil else { return }
         let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.poll() }
+            MainActor.assumeIsolated { self?.poll() }
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
@@ -162,18 +162,18 @@ final class PeekCenter {
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.didLaunchApplicationNotification,
                                             object: nil, queue: .main) { [weak self] note in
-            Task { @MainActor in
-                guard settings.peeks.apps,
+            MainActor.assumeIsolated {
+                guard let self, settings.peeks.apps,
                       let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
-                self?.peekForApplication(app, launched: true)
+                self.peekForApplication(app, launched: true)
             }
         })
         observers.append(center.addObserver(forName: NSWorkspace.didTerminateApplicationNotification,
                                             object: nil, queue: .main) { [weak self] note in
-            Task { @MainActor in
-                guard settings.peeks.apps,
+            MainActor.assumeIsolated {
+                guard let self, settings.peeks.apps,
                       let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
-                self?.peekForApplication(app, launched: false)
+                self.peekForApplication(app, launched: false)
             }
         })
     }

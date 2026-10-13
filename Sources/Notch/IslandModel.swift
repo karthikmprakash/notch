@@ -131,7 +131,8 @@ final class IslandModel: ObservableObject {
     private func wireServices() {
         settings.objectWillChange
             .sink { [weak self] _ in
-                Task { @MainActor in self?.settingsChanged() }
+                guard let self else { return }
+                Task { @MainActor in self.settingsChanged() }
             }
             .store(in: &cancellables)
 
@@ -146,25 +147,29 @@ final class IslandModel: ObservableObject {
 
         music.$status
             .sink { [weak self] _ in
-                Task { @MainActor in self?.updateBackground() }
+                guard let self else { return }
+                Task { @MainActor in self.updateBackground() }
             }
             .store(in: &cancellables)
 
         claude.$isWorking
             .sink { [weak self] _ in
-                Task { @MainActor in self?.updateBackground() }
+                guard let self else { return }
+                Task { @MainActor in self.updateBackground() }
             }
             .store(in: &cancellables)
 
         claude.$step
             .sink { [weak self] _ in
-                Task { @MainActor in self?.updateBackground() }
+                guard let self else { return }
+                Task { @MainActor in self.updateBackground() }
             }
             .store(in: &cancellables)
 
         claude.$card
             .sink { [weak self] card in
-                Task { @MainActor in self?.applyCard(card) }
+                guard let self else { return }
+                Task { @MainActor in self.applyCard(card) }
             }
             .store(in: &cancellables)
 
@@ -205,7 +210,8 @@ final class IslandModel: ObservableObject {
     private func relay<T: ObservableObject>(_ object: T) {
         object.objectWillChange
             .sink { [weak self] _ in
-                Task { @MainActor in self?.objectWillChange.send() }
+                guard let self else { return }
+                Task { @MainActor in self.objectWillChange.send() }
             }
             .store(in: &cancellables)
     }

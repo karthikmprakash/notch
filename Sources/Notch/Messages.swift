@@ -30,7 +30,7 @@ final class MessagesService: ObservableObject {
         refresh()
         guard timer == nil else { return }
         let timer = Timer(timeInterval: 20, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            MainActor.assumeIsolated { self?.refresh() }
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer

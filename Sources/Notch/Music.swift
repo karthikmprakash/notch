@@ -76,7 +76,7 @@ final class MusicService: ObservableObject {
         guard timer == nil else { return }
         poll()
         let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.poll() }
+            MainActor.assumeIsolated { self?.poll() }
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
@@ -106,7 +106,8 @@ final class MusicService: ObservableObject {
         queue.async { [weak self] in
             let script = player == .spotify ? Self.spotifyScript : Self.musicScript
             let result = Self.run(script)
-            Task { @MainActor in self?.apply(result, player: player) }
+            guard let self else { return }
+            Task { @MainActor in self.apply(result, player: player) }
         }
     }
 
@@ -159,7 +160,8 @@ final class MusicService: ObservableObject {
         if track.player == .music {
             queue.async { [weak self] in
                 let data = Self.runArtworkData()
-                Task { @MainActor in self?.setArtwork(data: data) }
+                guard let self else { return }
+                Task { @MainActor in self.setArtwork(data: data) }
             }
             return
         }
@@ -176,10 +178,11 @@ final class MusicService: ObservableObject {
               !fetchingArtwork else { return }
         fetchingArtwork = true
         Task { [weak self] in
-            defer { Task { @MainActor in self?.fetchingArtwork = false } }
+            guard let self else { return }
+            defer { Task { @MainActor in self.fetchingArtwork = false } }
             guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
             try? data.write(to: cached)
-            await MainActor.run { self?.setArtwork(data: data) }
+            await MainActor.run { self.setArtwork(data: data) }
         }
     }
 

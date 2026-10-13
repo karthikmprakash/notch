@@ -40,7 +40,7 @@ final class CalendarService: ObservableObject {
         }
         guard timer == nil else { return }
         let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            MainActor.assumeIsolated { self?.refresh() }
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
@@ -54,8 +54,8 @@ final class CalendarService: ObservableObject {
     /// Asked the first time the calendar tile is switched on.
     func requestAccess() {
         store.requestFullAccessToEvents { [weak self] granted, _ in
+            guard let self else { return }
             Task { @MainActor in
-                guard let self else { return }
                 self.status = granted ? .granted : .denied
                 self.refresh()
             }
@@ -134,7 +134,7 @@ final class FocusTimer: ObservableObject {
         running = true
         endDate = Date().addingTimeInterval(remaining)
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            MainActor.assumeIsolated { self?.tick() }
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer

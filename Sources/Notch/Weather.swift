@@ -35,7 +35,7 @@ final class WeatherService: ObservableObject {
         refresh()
         guard refreshTimer == nil else { return }
         let timer = Timer(timeInterval: 900, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            MainActor.assumeIsolated { self?.refresh() }
         }
         RunLoop.main.add(timer, forMode: .common)
         refreshTimer = timer
