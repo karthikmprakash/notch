@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0 (must match Resources/Info.plist). Leave empty to use the tag."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      # Optional secrets. Without them the app is ad-hoc signed, which works but
+      # means Gatekeeper asks the user to allow the first launch.
+      HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' }}
+      HAS_NOTARY: ${{ secrets.NOTARY_APPLE_ID != '' }}
+      HAS_TAP: ${{ secrets.TAP_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: v
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v$VERSION"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "releasing $TAG (version $VERSION)"
+
+      - name: The tag and Info.plist must agree
+        run: |
+          set -euo pipefail
+          PLIST=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          if [ "$PLIST" != "${{ steps.v.outputs.version }}" ]; then
+            echo "::error::Resources/Info.plist says $PLIST but the release is ${{ steps.v.outputs.version }}"
+            exit 1
+          fi
+
+      - name: Import the Developer ID certificate
+        if: env.HAS_CERT == 'true'
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/Developer ID Application/ {print $2; exit}')
+          [ -n "$IDENTITY" ] || { echo "::error::no Developer ID Application identity in the certificate"; exit 1; }
+          echo "NOTCH_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: "Build (universal: arm64 + x86_64)"
+        env:
+          NOTCH_UNIVERSAL: "1"
+        run: ./build.sh release
+
+      - name: Check the binary is universal
+        run: |
+          set -euo pipefail
+          lipo -archs build/Notch.app/Contents/MacOS/Notch | tee /tmp/archs
+          lipo -archs build/Notch.app/Contents/MacOS/Notch | grep -q x86_64
+
+      - name: Notarize (only with Developer ID secrets)
+        if: env.HAS_CERT == 'true' && env.HAS_NOTARY == 'true'
+        env:
+          APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          APP_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ditto -c -k --sequesterRsrc --keepParent build/Notch.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APP_PASSWORD" --wait
+          xcrun stapler staple build/Notch.app
+          xcrun stapler validate build/Notch.app
+
+      - name: Package
+        id: pkg
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ZIP="dist/Notch-${{ steps.v.outputs.version }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent build/Notch.app "$ZIP"
+          SHA=$(shasum -a 256 "$ZIP" | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "$SHA  $(basename "$ZIP")" > dist/sha256.txt
+          ls -lh dist
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.v.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.zip dist/sha256.txt --clobber
+          else
+            gh release create "$TAG" dist/*.zip dist/sha256.txt \
+              --title "Notch ${{ steps.v.outputs.version }}" \
+              --generate-notes
+          fi
+
+      - name: Update the Homebrew tap
+        if: env.HAS_TAP == 'true'
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/karthikmprakash/homebrew-tap.git" "$RUNNER_TEMP/tap"
+          ./tools/update-cask.sh "${{ steps.v.outputs.version }}" "${{ steps.pkg.outputs.sha256 }}" \
+            --write --tap-dir "$RUNNER_TEMP/tap" --push
+
+      - name: Tell the user what to do next
+        run: |
+          if [ "$HAS_TAP" != "true" ]; then
+            echo "Homebrew tap not updated automatically (no TAP_TOKEN secret)."
+            echo "Run this locally to bump it:"
+            echo "  ./tools/update-cask.sh ${{ steps.v.outputs.version }} ${{ steps.pkg.outputs.sha256 }} --write --tap-dir ../homebrew-tap --push"
+          fi
+          {
+            echo "### Notch ${{ steps.v.outputs.version }}"
+            echo
+            echo "- zip sha256: \`${{ steps.pkg.outputs.sha256 }}\`"
+            echo "- signing: $([ "$HAS_CERT" = "true" ] && echo "Developer ID" || echo "ad-hoc (Gatekeeper will ask on first launch)")"
+            echo "- notarized: $([ "$HAS_NOTARY" = "true" ] && echo yes || echo no)"
+            echo
+            echo "brew install --cask karthikmprakash/tap/notch"
+          } >> "$GITHUB_STEP_SUMMARY"

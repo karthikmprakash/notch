@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build, test, bundle
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && sw_vers
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-swiftpm-${{ hashFiles('Package.swift') }}
+          restore-keys: ${{ runner.os }}-swiftpm-
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Test
+        run: swift test
+
+      - name: Assemble the app bundle
+        run: ./build.sh release
+
+      # A missing privacy-usage key does not just fail: TCC aborts the process
+      # at runtime. Checking them here is the cheapest possible regression test.
+      - name: Verify bundle, signature and privacy keys
+        run: |
+          set -euo pipefail
+          APP=build/Notch.app
+          test -x "$APP/Contents/MacOS/Notch"
+          codesign --verify --verbose=2 "$APP"
+          for key in CFBundleIdentifier CFBundleShortVersionString LSMinimumSystemVersion LSUIElement \
+                     NSAppleEventsUsageDescription NSCalendarsFullAccessUsageDescription \
+                     NSFocusStatusUsageDescription NSBluetoothAlwaysUsageDescription; do
+            /usr/libexec/PlistBuddy -c "Print :$key" "$APP/Contents/Info.plist" >/dev/null \
+              || { echo "::error::Info.plist is missing $key"; exit 1; }
+          done
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$APP/Contents/Info.plist")" = "true"
+
+      # The hook runs on every Claude Code tool call, so it has to be fast and
+      # it has to stay silent when there is nothing to decide.
+      - name: Hook CLI smoke test
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, subprocess, time, pathlib, sys
+          binary = pathlib.Path("build/Notch.app/Contents/MacOS/Notch")
+          payload = json.dumps({
+              "hook_event_name": "PreToolUse",
+              "session_id": "ci",
+              "tool_name": "Read",
+              "tool_input": {"file_path": "/tmp/ci"},
+          }).encode()
+          start = time.time()
+          proc = subprocess.run([str(binary), "--hook"], input=payload, capture_output=True)
+          ms = int((time.time() - start) * 1000)
+          print(f"hook exited {proc.returncode} after {ms} ms, stdout={proc.stdout!r}")
+          if proc.returncode != 0:
+              sys.exit("hook must exit 0")
+          if proc.stdout.strip():
+              sys.exit("a PreToolUse hook must not print a decision")
+          if ms > 2000:
+              sys.exit("hook is too slow to run on every tool call")
+          PY
+
+      - name: Upload the app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Notch-app-${{ github.sha }}
+          path: build/Notch.app
+          if-no-files-found: error
+          retention-days: 7

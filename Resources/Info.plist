@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>Notch</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.kmp.notch</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Notch</string>
+	<key>CFBundleDisplayName</key>
+	<string>Notch</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Notch reads the current track and controls playback in Spotify or Apple Music. Only used by the music tile you turn on.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Notch shows your next calendar event in the notch. Only used by the calendar tile you turn on.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Notch shows Bluetooth state in the quick controls tile. Only used when that tile is on.</string>
+	<key>NSFocusStatusUsageDescription</key>
+	<string>Notch shows whether Do Not Disturb is on, so it can show a peek when Focus turns on or off. Without this permission the app only says that Focus status is unavailable.</string>
+</dict>
+</plist>
