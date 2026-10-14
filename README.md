@@ -77,6 +77,13 @@ were checked in the native app. White Matte now uses slightly darker tile fills
 brew install --cask karthikmprakash/tap/notch
 ```
 
+The fully-qualified name is what makes this work: `brew install --cask notch` only
+resolves once this tap is on your machine (Homebrew searches tapped taps, plus the
+official `homebrew/cask`). It works bare from the second install on. Getting the
+bare name to work for *everyone* means being accepted into `homebrew/cask`, which
+requires a notarized, Developer ID-signed build plus enough adoption to clear
+Homebrew's notability bar — see [Releases, CI and the tap](#releases-ci-and-the-tap).
+
 That puts `Notch.app` in /Applications and links the same binary as `notch`, so
 the Claude Code hook command is just `notch --hook` no matter where Homebrew
 lives.
